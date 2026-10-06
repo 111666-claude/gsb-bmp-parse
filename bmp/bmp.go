@@ -38,31 +38,36 @@ func Parse(data []byte, c *Counter) (Result, error) {
 	height := int(int32(binary.LittleEndian.Uint32(data[22:26])))
 	bits := int(binary.LittleEndian.Uint16(data[28:30]))
 	palette := int(binary.LittleEndian.Uint32(data[46:50]))
-	start := 54
-	stride := width * bits / 8
+	start := int(binary.LittleEndian.Uint32(data[10:14]))
+	raw := (width*bits + 7) / 8
+	stride := (raw + 3) / 4 * 4
 	rows := Abs(height)
+	topDown := height < 0
 
 	pixel := func(b byte) int { return int(b) }
 	if bits == 8 {
 		pixel = func(b byte) int {
-			for k := 0; k < palette; k++ {
-				c.Scanned += 4
-				if k == int(b) {
-					off := 54 + k*4
-					if off+2 >= len(data) {
-						return 0
-					}
-					return int(data[off]) + int(data[off+1]) + int(data[off+2])
-				}
+			idx := int(b)
+			c.Scanned += 4
+			if idx >= palette {
+				return 0
 			}
-			return 0
+			off := 54 + idx*4
+			if off+2 >= len(data) {
+				return 0
+			}
+			return int(data[off]) + int(data[off+1]) + int(data[off+2])
 		}
 	}
 
 	sum := 0
 	n := 0
 	for y := 0; y < rows; y++ {
-		src := start + (rows-1-y)*stride
+		row := y
+		if !topDown {
+			row = rows - 1 - y
+		}
+		src := start + row*stride
 		for x := 0; x < stride; x++ {
 			p := src + x
 			if p >= len(data) {
